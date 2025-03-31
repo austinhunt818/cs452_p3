@@ -31,7 +31,7 @@
  */
 size_t btok(size_t bytes)
 {
-    if(bytes <= 1) return 1; //add 1 extra to k to account for tag bit
+    if(bytes <= 1) return 0;
 
     size_t k = 0;
     k+=(btok(bytes/2) + 1);
@@ -39,8 +39,20 @@ size_t btok(size_t bytes)
 }
 
 struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
-{
+{   
+    if (buddy == NULL)
+    {
+        return NULL;
+    }
 
+    int addr = (int)((char *)buddy - (char *)pool->base);
+    int k = buddy->kval;
+
+    int buddy_addr = (addr ^ (1 << k));
+    struct avail *buddy_block = (struct avail *)((char *)pool->base + buddy_addr);
+    buddy_block->kval = buddy->kval;
+    buddy_block->tag = buddy->tag;
+    return buddy_block;
 }
 
 void *buddy_malloc(struct buddy_pool *pool, size_t size)

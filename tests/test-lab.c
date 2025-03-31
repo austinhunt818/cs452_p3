@@ -136,10 +136,41 @@ void test_buddy_init(void)
 void test_btok(void){
   fprintf(stderr, "->Testing btok\n");
 
-  int bytes = 1024;
+  int bytes = 16;
   int k = btok(bytes);
-  fprintf(stderr, "bytes = %d\nk = %d\n", bytes, k);
+  fprintf(stderr, "\tbytes = %d\n\tk = %d\n", bytes, k);
+  assert(btok(bytes) == 4);
+
+   bytes = 1024;
+   k = btok(bytes);
+  fprintf(stderr, "\tbytes = %d\n\tk = %d\n", bytes, k);
   assert(btok(bytes) == 10);
+
+   bytes = 1048576;
+   k = btok(bytes);
+  fprintf(stderr, "\tbytes = %d\n\tk = %d\n", bytes, k);
+  assert(btok(bytes) == 20);
+}
+
+void test_buddy_calc(void){
+  fprintf(stderr, "->Testing buddy_calc\n");
+  struct buddy_pool pool;
+  buddy_init(&pool, 1024);
+  struct avail *block = (struct avail *)pool.base;
+  block->tag = BLOCK_AVAIL;
+  block->kval = 10;
+
+  struct avail *buddy = buddy_calc(&pool, block);
+  fprintf(stderr, "\tblock = %p\n\tbuddy = %p\n\n", block, buddy);
+  assert(buddy != NULL);
+  assert(buddy = block + (1 << block->kval));
+
+  struct avail *block_buddy = buddy_calc(&pool, buddy);
+  fprintf(stderr, "\tblock_buddy = \t%p\n\tbuddy = \t%p\n", block_buddy, block);
+  assert(block_buddy != NULL);
+  assert(block_buddy = block);
+
+  buddy_destroy(&pool);
 }
 
 
@@ -151,9 +182,10 @@ int main(void) {
   printf("Running memory tests.\n");
 
   UNITY_BEGIN();
-  // RUN_TEST(test_buddy_init);
+  RUN_TEST(test_buddy_init);
   // RUN_TEST(test_buddy_malloc_one_byte);
   // RUN_TEST(test_buddy_malloc_one_large);
   RUN_TEST(test_btok);
+  RUN_TEST(test_buddy_calc);
 return UNITY_END();
 }
