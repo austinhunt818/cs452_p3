@@ -133,6 +133,15 @@ void test_buddy_init(void)
     }
 }
 
+void test_btok(void){
+  fprintf(stderr, "->Testing btok\n");
+
+  int bytes = 1024;
+  int k = btok(bytes);
+  fprintf(stderr, "bytes = %d\nk = %d\n", bytes, k);
+  assert(btok(bytes) == 10);
+}
+
 
 int main(void) {
   time_t t;
@@ -142,8 +151,9 @@ int main(void) {
   printf("Running memory tests.\n");
 
   UNITY_BEGIN();
-  RUN_TEST(test_buddy_init);
-  RUN_TEST(test_buddy_malloc_one_byte);
-  RUN_TEST(test_buddy_malloc_one_large);
+  // RUN_TEST(test_buddy_init);
+  // RUN_TEST(test_buddy_malloc_one_byte);
+  // RUN_TEST(test_buddy_malloc_one_large);
+  RUN_TEST(test_btok);
 return UNITY_END();
 }

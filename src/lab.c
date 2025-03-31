@@ -31,7 +31,11 @@
  */
 size_t btok(size_t bytes)
 {
-    //DO NOT use math.pow
+    if(bytes <= 1) return 1; //add 1 extra to k to account for tag bit
+
+    size_t k = 0;
+    k+=(btok(bytes/2) + 1);
+    return k;
 }
 
 struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
