@@ -57,18 +57,57 @@ struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
 
 void *buddy_malloc(struct buddy_pool *pool, size_t size)
 {
-
+    
     //get the kval for the requested size with enough room for the tag and kval fields
+    size_t kval = btok(size + sizeof(struct avail));
 
     //R1 Find a block
+    if(kval > pool->kval_m)
+    {
+        return NULL; //Not enough memory
+    }
+
+    //Find the first available block that is >= kval
+    struct avail *block = NULL;
+    for (size_t i = kval; i <= pool->kval_m; i++)
+    {
+        if (pool->avail[i].next != &pool->avail[i])
+        {
+            block = pool->avail[i].next;
+            break;
+        }
+    }
 
     //There was not enough memory to satisfy the request thus we need to set error and return NULL
+    if (block == NULL)
+    {
+        return NULL;
+    }
 
     //R2 Remove from list;
+    //remove the block from the list
+    // block->prev->next = block->next;
 
-    //R3 Split required?
 
-    //R4 Split the block
+    // //R3 Split required?
+    // if(block->kval > kval){
+    //     struct avail *buddy = buddy_calc(pool, block);
+    //     if (buddy == NULL)
+    //     {
+    //         return NULL;
+    //     }
+    // }
+
+    // //R4 Split the block
+    // //Set the tag and kval for the block
+    // block->tag = BLOCK_RESERVED;
+    // block->kval = kval;
+    // block->next = block->prev = block;
+    // //Set the block to point to the base address
+    // block->next = (struct avail *)((char *)pool->base + ((char *)block - (char *)pool->base));
+    // block->prev = (struct avail *)((char *)pool->base + ((char *)block - (char *)pool->base));
+
+    return ((char *)block + sizeof(struct avail));
 
 }
 
@@ -77,19 +116,19 @@ void buddy_free(struct buddy_pool *pool, void *ptr)
 
 }
 
-/**
- * @brief This is a simple version of realloc.
- *
- * @param poolThe memory pool
- * @param ptr  The user memory
- * @param size the new size requested
- * @return void* pointer to the new user memory
- */
-void *buddy_realloc(struct buddy_pool *pool, void *ptr, size_t size)
-{
-    //Required for Grad Students
-    //Optional for Undergrad Students
-}
+// /**
+//  * @brief This is a simple version of realloc.
+//  *
+//  * @param poolThe memory pool
+//  * @param ptr  The user memory
+//  * @param size the new size requested
+//  * @return void* pointer to the new user memory
+//  */
+// void *buddy_realloc(struct buddy_pool *pool, void *ptr, size_t size)
+// {
+//     //Required for Grad Students
+//     //Optional for Undergrad Students
+// }
 
 void buddy_init(struct buddy_pool *pool, size_t size)
 {
