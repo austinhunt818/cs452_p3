@@ -67,10 +67,9 @@ struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
 }
 
 void *buddy_malloc(struct buddy_pool *pool, size_t size)
-{
-    //get the kval for the requested size with enough room for the tag
+{    //get the kval for the requested size with enough room for the tag
     size_t kval = btok(size + sizeof(struct avail)); //sizeof(struct avail) is the size of the metadata
-    fprintf(stderr, "buddy_malloc: kval = %zu\n", kval);
+    fprintf(stderr, "buddy_malloc: kval = %lu\n", kval);
 
     //R1 Find a block
 
@@ -81,7 +80,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     }
 
     //Find the first available block that is >= kval
-    size_t j = kval;
+    size_t j = kval-1;
     for (size_t i = kval; i <= pool->kval_m; i++)
     {
         if (pool->avail[i].next != &pool->avail[i])
@@ -90,6 +89,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
             break;
         }
     }
+    fprintf(stderr, "buddy_malloc: j = %lu\n", j);
 
     //If we did not find a block then we need to return NULL
     if(j < kval  || j > pool->kval_m)
@@ -100,12 +100,12 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
 
     //R2 Remove from list;
     // remove the block from the list
+    fprintf(stderr, "Removing block from list\n");
     struct avail *l = pool->avail[j].next;
     struct avail *p = l->next;
     pool->avail[j].next = p;
     p->prev = &pool->avail[j];
     l->tag = BLOCK_RESERVED;
-
     
     while(j > kval){
         fprintf(stderr, "Splitting block\n");
@@ -148,6 +148,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
 
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
+    fprintf(stderr, "\n\n\nbuddy_free: ptr = %p\n", ptr);
     struct avail *block = (struct avail *)((char *)ptr - sizeof(struct avail));
     if (block == NULL)
     {
@@ -164,11 +165,19 @@ void buddy_free(struct buddy_pool *pool, void *ptr)
     struct avail *buddy = buddy_calc(pool, block);
     if (buddy == NULL)
     {
+        if(block->kval == pool->kval_m){
+            block->tag = BLOCK_AVAIL;
+            block->next = &pool->avail[block->kval];
+            block->prev = &pool->avail[block->kval];
+            pool->avail[block->kval].next = block;
+            return; // Buddy calculation failed
+        }
         fprintf(stderr, "buddy_free: Buddy calculation failed\n");
         return; // Buddy calculation failed
     }
 
     if(block->kval == pool->kval_m || buddy->tag == BLOCK_RESERVED || (buddy->tag == BLOCK_AVAIL && buddy->kval != block->kval)){
+        fprintf(stderr, "Buddy is not available\n");
         //S3 Put on list
         block->tag = BLOCK_AVAIL;
         buddy = pool->avail[block->kval].next;
@@ -179,6 +188,7 @@ void buddy_free(struct buddy_pool *pool, void *ptr)
         pool->avail[block->kval].next = block;
     }
     else{
+        fprintf(stderr, "Buddy is available\n");
         while(buddy->tag == BLOCK_AVAIL && buddy->kval == block->kval){
             //S2 Combine with buddy
             struct avail temp_block = *block;

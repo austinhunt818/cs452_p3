@@ -78,13 +78,6 @@ void test_buddy_malloc_one_byte(void)
   //Make sure correct kval was allocated
   
   buddy_free(&pool, mem);
-
-  for(int i = 0; i < kval+1; i++)
-  {
-    fprintf(stderr, "Avail[%d] tag = %d\n", i, pool.avail[i].tag);
-    fprintf(stderr, "Avail[%d] memory = %p\n", i, &pool.avail[i]);
-    fprintf(stderr, "Avail[%d].next memory = %p\n\n", i, pool.avail[i].next);
-  }
   check_buddy_pool_full(&pool);
   buddy_destroy(&pool);
 }
@@ -104,7 +97,17 @@ void test_buddy_malloc_one_large(void)
   //the internal details of buddy_init.
   size_t ask = bytes - sizeof(struct avail);
   void *mem = buddy_malloc(&pool, ask);
+  fprintf(stderr, "Allocated memory address: %p\n", mem);
   assert(mem != NULL);
+
+  // for(size_t i = 0; i < pool.kval_m; i++)
+  // {
+  //   if(pool.avail[i].next == &pool.avail[i])
+  //     continue;
+  //   fprintf(stderr, "Avail[%lu] tag = %d\n", i, pool.avail[i].next);
+  //   fprintf(stderr, "Avail[%lu] memory = %p\n", i, &pool.avail[i]);
+  //   fprintf(stderr, "Avail[%lu].next memory = %p\n\n", i, pool.avail[i].next);
+  // }
 
   //Move the pointer back and make sure we got what we expected
   struct avail *tmp = (struct avail *)mem - 1;
@@ -112,7 +115,10 @@ void test_buddy_malloc_one_large(void)
   assert(tmp->tag == BLOCK_RESERVED);
   check_buddy_pool_empty(&pool);
 
-  //Verify that a call on an empty tool fails as expected and errno is set to ENOMEM.
+  
+ 
+
+  //Verify that a call on an empty pool fails as expected and errno is set to ENOMEM.
   void *fail = buddy_malloc(&pool, 5);
   assert(fail == NULL);
   assert(errno = ENOMEM);
@@ -192,11 +198,11 @@ int main(void) {
   printf("Running memory tests.\n");
 
   UNITY_BEGIN();
-  // RUN_TEST(test_buddy_init);
-  // RUN_TEST(test_btok);
-  // RUN_TEST(test_buddy_calc);
+  RUN_TEST(test_buddy_init);
+  RUN_TEST(test_btok);
+  RUN_TEST(test_buddy_calc);
   RUN_TEST(test_buddy_malloc_one_byte);
-  // RUN_TEST(test_buddy_malloc_one_large);
+  RUN_TEST(test_buddy_malloc_one_large);
   
 return UNITY_END();
 }
