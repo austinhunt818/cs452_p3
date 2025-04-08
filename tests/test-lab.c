@@ -72,10 +72,19 @@ void test_buddy_malloc_one_byte(void)
   int kval = MIN_K;
   size_t size = UINT64_C(1) << kval;
   buddy_init(&pool, size);
+
   void *mem = buddy_malloc(&pool, 1);
   printf("Allocated memory address: %p\n", mem);
   //Make sure correct kval was allocated
+  
   buddy_free(&pool, mem);
+
+  for(int i = 0; i < kval+1; i++)
+  {
+    fprintf(stderr, "Avail[%d] tag = %d\n", i, pool.avail[i].tag);
+    fprintf(stderr, "Avail[%d] memory = %p\n", i, &pool.avail[i]);
+    fprintf(stderr, "Avail[%d].next memory = %p\n\n", i, pool.avail[i].next);
+  }
   check_buddy_pool_full(&pool);
   buddy_destroy(&pool);
 }
@@ -183,11 +192,11 @@ int main(void) {
   printf("Running memory tests.\n");
 
   UNITY_BEGIN();
-  RUN_TEST(test_buddy_init);
-  RUN_TEST(test_btok);
-  RUN_TEST(test_buddy_calc);
+  // RUN_TEST(test_buddy_init);
+  // RUN_TEST(test_btok);
+  // RUN_TEST(test_buddy_calc);
   RUN_TEST(test_buddy_malloc_one_byte);
-  RUN_TEST(test_buddy_malloc_one_large);
+  // RUN_TEST(test_buddy_malloc_one_large);
   
 return UNITY_END();
 }

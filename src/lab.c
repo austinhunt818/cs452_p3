@@ -47,14 +47,14 @@ struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
     }
 
     uintptr_t addr = (int)((char *)buddy - (char *)pool->base);
-    fprintf(stderr, "buddy_calc: addr = %p - %p = %d\n", buddy, pool->base, addr);
+    fprintf(stderr, "buddy_calc: addr = %p - %p = %ld\n", buddy, pool->base, addr);
     int k = buddy->kval;
 
     fprintf(stderr, "buddy_calc: k = %d\n", k);
     uintptr_t buddy_addr = (addr ^ (UINT64_C(1) << k));
-    if (buddy_addr < 0 || buddy_addr >= (uintptr_t)pool->numbytes)
+    if (buddy_addr >= (uintptr_t)pool->numbytes)
     {
-        fprintf(stderr, "buddy_calc: Buddy address out of range. Invalid adress: %p\tMax address: %p\n", buddy_addr, pool->numbytes);
+        fprintf(stderr, "buddy_calc: Buddy address out of range. Invalid address: %p\tMax address: %p\n", buddy_addr, pool->numbytes);
         return NULL; // Ensure buddy address is within valid range
     }
 
@@ -81,7 +81,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     }
 
     //Find the first available block that is >= kval
-    size_t j = -1;
+    size_t j = kval;
     for (size_t i = kval; i <= pool->kval_m; i++)
     {
         if (pool->avail[i].next != &pool->avail[i])
@@ -92,7 +92,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     }
 
     //If we did not find a block then we need to return NULL
-    if(j == -1 || j > pool->kval_m)
+    if(j < kval  || j > pool->kval_m)
     {
         fprintf(stderr, "No available blocks\n");
         return NULL; //No available blocks
@@ -105,10 +105,11 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     pool->avail[j].next = p;
     p->prev = &pool->avail[j];
     l->tag = BLOCK_RESERVED;
+
     
     while(j > kval){
         fprintf(stderr, "Splitting block\n");
-        fprintf(stderr, "Block size: %zu\n", l->kval);
+        fprintf(stderr, "Block size: %d\n", l->kval);
         fprintf(stderr, "kval size: %zu\n", kval);
         //R4 Split the block
         l->kval--;
@@ -125,6 +126,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
             return NULL;
         }
 
+        fprintf(stderr, "Buddy address: %p\n", buddy);
         // Update the buddy block's properties
         buddy->tag = BLOCK_AVAIL;
         buddy->kval = l->kval;
@@ -140,6 +142,7 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     }
 
     // Return the memory address just after the block's metadata
+    printf("\n\n\n");
     return (void *)((char *)l + sizeof(struct avail));
 }
 
@@ -176,14 +179,46 @@ void buddy_free(struct buddy_pool *pool, void *ptr)
         pool->avail[block->kval].next = block;
     }
     else{
-        //S2 Combine with buddy
-        buddy->prev->next = buddy->next;
-        buddy->next->prev = buddy->prev;
-        buddy->tag = BLOCK_UNUSED;
+        while(buddy->tag == BLOCK_AVAIL && buddy->kval == block->kval){
+            //S2 Combine with buddy
+            struct avail temp_block = *block;
 
-        block->kval++;
-        if((uintptr_t)block < (uintptr_t)buddy){
-            block = buddy;
+            fprintf(stderr, "Combining with buddy\n");
+            fprintf(stderr, "Block address: %p\n", block);
+            fprintf(stderr, "Buddy address: %p\n", buddy);
+            
+            if (buddy == NULL)
+            {
+                fprintf(stderr, "buddy_free: Buddy calculation failed\n");
+                return; // Buddy calculation failed
+            }
+
+            buddy->prev->next = buddy->next;
+            buddy->next->prev = buddy->prev;
+            buddy->tag = BLOCK_UNUSED;
+            
+            block->kval++;
+            if (buddy != NULL && (uintptr_t)buddy < (uintptr_t)block)
+            {
+                block = buddy;
+            }
+            if(block->kval == pool->kval_m){
+                block->tag = BLOCK_AVAIL;
+                block->next = &pool->avail[block->kval];
+                block->prev = &pool->avail[block->kval];
+                pool->avail[block->kval].next = block;
+
+                return block;
+            }
+            buddy = buddy_calc(pool, block);
+
+
+            if (buddy == NULL)
+            {
+                fprintf(stderr, "buddy_free: Buddy calculation failed\n");
+                return; // Buddy calculation failed
+            }
+           
         }
         buddy_free(pool, &block);
     }
@@ -222,6 +257,7 @@ void buddy_init(struct buddy_pool *pool, size_t size)
     pool->kval_m = kval;
     pool->numbytes = (UINT64_C(1) << pool->kval_m);
     //Memory map a block of raw memory to manage
+
     pool->base = mmap(
         NULL,                               /*addr to map to*/
         pool->numbytes,                     /*length*/
