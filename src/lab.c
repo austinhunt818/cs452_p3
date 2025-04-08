@@ -145,45 +145,48 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
 
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
-    if(ptr == NULL){
-        fprintf(stderr, "Pointer is NULL\n");
+    struct avail *block = (struct avail *)((char *)ptr - sizeof(struct avail));
+    if (block == NULL)
+    {
+        fprintf(stderr, "buddy_free: Block is NULL\n");
         return; // Nothing to free
     }
-
-    struct avail *block = (struct avail *)((char *)ptr - sizeof(struct avail));
     if (block->tag != BLOCK_RESERVED)
     {
-        fprintf(stderr, "Block is not reserved\n");
+        fprintf(stderr, "buddy_free: Block is not reserved\n");
         return; // Block is not reserved
     }
-    
-    // find the buddy
+
+    //S1 Is buddy available?
     struct avail *buddy = buddy_calc(pool, block);
     if (buddy == NULL)
     {
-        fprintf(stderr, "Buddy calculation failed\n");
+        fprintf(stderr, "buddy_free: Buddy calculation failed\n");
         return; // Buddy calculation failed
     }
 
-    // check if we can merge with buddy
-    if (block->tag == BLOCK_AVAIL && buddy->tag == BLOCK_AVAIL)
-    {
-        // merge the blocks
-        block->kval++;
-        buddy->tag = BLOCK_UNUSED;
-        buddy->next->prev = buddy->prev;
-        buddy->prev->next = buddy->next;
-        buddy->next = buddy->prev = NULL;
-
-        // add the merged block back into the free list
+    if(block->kval == pool->kval_m || buddy->tag == BLOCK_RESERVED || (buddy->tag == BLOCK_AVAIL && buddy->kval != block->kval)){
+        //S3 Put on list
+        block->tag = BLOCK_AVAIL;
+        buddy = pool->avail[block->kval].next;
+        block->next = buddy;
+        buddy->prev = block;
+        // block->kval = buddy->kval;
+        block->prev = &pool->avail[block->kval];
+        pool->avail[block->kval].next = block;
     }
+    else{
+        //S2 Combine with buddy
+        buddy->prev->next = buddy->next;
+        buddy->next->prev = buddy->prev;
+        buddy->tag = BLOCK_UNUSED;
 
-    // add back into free list
-    block->prev = pool->avail[block->kval].prev;
-    block->next = &pool->avail[block->kval];
-    pool->avail[block->kval].prev->next = block;
-    pool->avail[block->kval].prev = block;
-    block->tag = BLOCK_AVAIL;
+        block->kval++;
+        if((uintptr_t)block < (uintptr_t)buddy){
+            block = buddy;
+        }
+        buddy_free(pool, &block);
+    }
 
 }
 
