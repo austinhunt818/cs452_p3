@@ -68,6 +68,17 @@ struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
 
 void *buddy_malloc(struct buddy_pool *pool, size_t size)
 {    //get the kval for the requested size with enough room for the tag
+
+    if (size == 0)
+    {
+        fprintf(stderr, "buddy_malloc: size is 0\n");
+        return NULL; // Nothing to allocate
+    }
+    if (size > pool->numbytes)
+    {
+        fprintf(stderr, "buddy_malloc: size is too large\n");
+        return NULL; // Size is too large
+    }
     size_t kval = btok(size + sizeof(struct avail)); //sizeof(struct avail) is the size of the metadata
     fprintf(stderr, "buddy_malloc: kval = %lu\n", kval);
 
@@ -148,6 +159,11 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
 
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
+    if(ptr == NULL)
+    {
+        fprintf(stderr, "buddy_free: ptr is NULL\n");
+        return; // Nothing to free
+    }
     fprintf(stderr, "\n\n\nbuddy_free: ptr = %p\n", ptr);
     struct avail *block = (struct avail *)((char *)ptr - sizeof(struct avail));
     if (block == NULL)

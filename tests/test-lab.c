@@ -130,6 +130,181 @@ void test_buddy_malloc_one_large(void)
 }
 
 /**
+ * Test allocating two different blocks and ensure they are distinct.
+ */
+void test_buddy_malloc_two_blocks(void) {
+  fprintf(stderr, "->Testing allocation of two different blocks\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  // Allocate first block
+  void *block1 = buddy_malloc(&pool, 16);
+  fprintf(stderr, "Allocated block1 at address: %p\n", block1);
+  assert(block1 != NULL);
+
+  // Allocate second block
+  void *block2 = buddy_malloc(&pool, 32);
+  fprintf(stderr, "Allocated block2 at address: %p\n", block2);
+  assert(block2 != NULL);
+
+  // Ensure the two blocks are distinct
+  assert(block1 != block2);
+
+  // Free both blocks
+  buddy_free(&pool, block1);
+  buddy_free(&pool, block2);
+
+  // Check if the pool is back to full
+  check_buddy_pool_full(&pool);
+
+  buddy_destroy(&pool);
+}
+
+void test_allocate_remove_reallocate() {
+  // Step 1: Allocate a block
+  int *block1 = (int *)malloc(sizeof(int) * 10); // Allocate memory for 10 integers
+  assert(block1 != NULL); // Ensure allocation was successful
+
+  // Step 2: Remove the block
+  free(block1);
+  block1 = NULL; // Avoid dangling pointer
+
+  // Step 3: Reallocate another block
+  int *block2 = (int *)malloc(sizeof(int) * 20); // Allocate memory for 20 integers
+  assert(block2 != NULL); // Ensure allocation was successful
+
+  // Step 4: Clean up
+  free(block2);
+  block2 = NULL;
+
+  printf("Test passed: Allocate, remove, and reallocate blocks successfully.\n");
+}
+
+/**
+ * Test buddy_malloc with zero size.
+ */
+void test_buddy_malloc_zero_size(void) {
+  fprintf(stderr, "->Testing buddy_malloc with zero size\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  void *mem = buddy_malloc(&pool, 0);
+  assert(mem == NULL);
+
+  check_buddy_pool_full(&pool);
+  buddy_destroy(&pool);
+}
+
+/**
+ * Test buddy_malloc with size larger than the pool.
+ */
+void test_buddy_malloc_exceed_pool_size(void) {
+  fprintf(stderr, "->Testing buddy_malloc with size exceeding pool size\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  void *mem = buddy_malloc(&pool, size + 1);
+  assert(mem == NULL);
+  assert(errno == ENOMEM);
+
+  check_buddy_pool_full(&pool);
+  buddy_destroy(&pool);
+}
+
+/**
+ * Test buddy_free with NULL pointer.
+ */
+void test_buddy_free_null_pointer(void) {
+  fprintf(stderr, "->Testing buddy_free with NULL pointer\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  buddy_free(&pool, NULL);
+
+  check_buddy_pool_full(&pool);
+  buddy_destroy(&pool);
+}
+
+/**
+ * Test buddy_malloc and buddy_free with multiple allocations and deallocations.
+ */
+void test_buddy_malloc_free_multiple_blocks(void) {
+  fprintf(stderr, "->Testing multiple allocations and deallocations\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  void *block1 = buddy_malloc(&pool, 16);
+  void *block2 = buddy_malloc(&pool, 32);
+  void *block3 = buddy_malloc(&pool, 64);
+
+  assert(block1 != NULL);
+  assert(block2 != NULL);
+  assert(block3 != NULL);
+
+  buddy_free(&pool, block2);
+  buddy_free(&pool, block1);
+  buddy_free(&pool, block3);
+
+  check_buddy_pool_full(&pool);
+  buddy_destroy(&pool);
+}
+
+/**
+ * Test buddy_malloc with exact power-of-two sizes.
+ */
+void test_buddy_malloc_power_of_two_sizes(void) {
+  fprintf(stderr, "->Testing buddy_malloc with power-of-two sizes\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  for (size_t i = 0; i <= MIN_K; i++) {
+    size_t alloc_size = UINT64_C(1) << i;
+    void *mem = buddy_malloc(&pool, alloc_size);
+    assert(mem != NULL);
+    buddy_free(&pool, mem);
+  }
+
+  check_buddy_pool_full(&pool);
+  buddy_destroy(&pool);
+}
+
+/**
+ * Test buddy_malloc and buddy_free with fragmentation.
+ */
+void test_buddy_fragmentation(void) {
+  fprintf(stderr, "->Testing fragmentation\n");
+  struct buddy_pool pool;
+  size_t size = UINT64_C(1) << MIN_K;
+  buddy_init(&pool, size);
+
+  void *block1 = buddy_malloc(&pool, 16);
+  void *block2 = buddy_malloc(&pool, 32);
+  void *block3 = buddy_malloc(&pool, 64);
+
+  assert(block1 != NULL);
+  assert(block2 != NULL);
+  assert(block3 != NULL);
+
+  buddy_free(&pool, block2);
+
+  void *block4 = buddy_malloc(&pool, 16);
+  assert(block4 != NULL);
+
+  buddy_free(&pool, block1);
+  buddy_free(&pool, block3);
+  buddy_free(&pool, block4);
+
+  check_buddy_pool_full(&pool);
+  buddy_destroy(&pool);
+}
+
+/**
  * Tests to make sure that the struct buddy_pool is correct and all fields
  * have been properly set kval_m, avail[kval_m], and base pointer after a
  * call to init
@@ -190,6 +365,7 @@ void test_buddy_calc(void){
 }
 
 
+
 int main(void) {
   time_t t;
   unsigned seed = (unsigned)time(&t);
@@ -203,6 +379,17 @@ int main(void) {
   RUN_TEST(test_buddy_calc);
   RUN_TEST(test_buddy_malloc_one_byte);
   RUN_TEST(test_buddy_malloc_one_large);
+
+  //these tests written by LLM
+  RUN_TEST(test_buddy_malloc_two_blocks);
+  RUN_TEST(test_allocate_remove_reallocate);
+  RUN_TEST(test_buddy_malloc_zero_size);
+  RUN_TEST(test_buddy_malloc_exceed_pool_size);
+  RUN_TEST(test_buddy_free_null_pointer);
+  RUN_TEST(test_buddy_malloc_free_multiple_blocks);
+  RUN_TEST(test_buddy_malloc_power_of_two_sizes);
+  RUN_TEST(test_buddy_fragmentation);
   
-return UNITY_END();
+  
+  return UNITY_END();
 }
