@@ -81,89 +81,110 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
     }
 
     //Find the first available block that is >= kval
-    struct avail *block = NULL;
+    size_t j = -1;
     for (size_t i = kval; i <= pool->kval_m; i++)
     {
         if (pool->avail[i].next != &pool->avail[i])
         {
-            block = pool->avail[i].next;
+            j = i;
             break;
         }
     }
 
-
-    fprintf(stderr, "i: %d\n", block->kval);
     //If we did not find a block then we need to return NULL
-    if (block == NULL)
+    if(j == -1 || j > pool->kval_m)
     {
-        errno = ENOMEM;
-        fprintf(stderr, "No available memory\n");
-        return NULL;
-    }
-    if (block->tag != BLOCK_AVAIL)
-    {
-        errno = ENOMEM;
-        fprintf(stderr, "Block is not available\n");
-        return NULL;
-    }
-    if (block->kval < kval)
-    {
-        errno = ENOMEM;
-        fprintf(stderr, "Block is not large enough\n");
-        return NULL;
+        fprintf(stderr, "No available blocks\n");
+        return NULL; //No available blocks
     }
 
     //R2 Remove from list;
     // remove the block from the list
-    block->prev->next = block->next;
-    block->next->prev = block->prev;
-    block->next = block->prev = NULL;
-    block->tag = BLOCK_RESERVED;
-
-    //R3 Split required?
-    while(block->kval > kval){
+    struct avail *l = pool->avail[j].next;
+    struct avail *p = l->next;
+    pool->avail[j].next = p;
+    p->prev = &pool->avail[j];
+    l->tag = BLOCK_RESERVED;
+    
+    while(j > kval){
         fprintf(stderr, "Splitting block\n");
-        fprintf(stderr, "Block size: %zu\n", block->kval);
+        fprintf(stderr, "Block size: %zu\n", l->kval);
         fprintf(stderr, "kval size: %zu\n", kval);
         //R4 Split the block
-        block->kval--;
-        struct avail *buddy = buddy_calc(pool, block);
+        l->kval--;
+        j--;
+        struct avail *buddy = buddy_calc(pool, l);
         if (buddy == NULL)
         {
             fprintf(stderr, "Buddy calculation failed\n");
             // If buddy calculation fails, we need to restore the block to its original state
-            block->prev->next = block;
-            block->next->prev = block;
-            block->next = block->prev = NULL;
-            block->tag = BLOCK_AVAIL;
+            l->prev->next = l;
+            l->next->prev = l;
+            l->next = l->prev = NULL;
+            l->tag = BLOCK_AVAIL;
             return NULL;
         }
 
         // Update the buddy block's properties
         buddy->tag = BLOCK_AVAIL;
-        buddy->next = &pool->avail[buddy->kval];
-        buddy->prev = pool->avail[buddy->kval].prev;
-        pool->avail[buddy->kval].prev->next = buddy;
-        pool->avail[buddy->kval].prev = buddy;
-
+        buddy->kval = l->kval;
+        buddy->next = buddy->prev = &pool->avail[buddy->kval];
+        pool->avail[buddy->kval].next = pool->avail[buddy->kval].prev = buddy;
     }
 
-
     // Ensure the block is valid before returning
-    if (block == NULL)
+    if (l == NULL)
     {
         fprintf(stderr, "Block is NULL\n");
         return NULL; // Return NULL if block is invalid
     }
 
     // Return the memory address just after the block's metadata
-    return (void *)((char *)block + sizeof(struct avail));
-
+    return (void *)((char *)l + sizeof(struct avail));
 }
 
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
+    if(ptr == NULL){
+        fprintf(stderr, "Pointer is NULL\n");
+        return; // Nothing to free
+    }
+
+    struct avail *block = (struct avail *)((char *)ptr - sizeof(struct avail));
+    if (block->tag != BLOCK_RESERVED)
+    {
+        fprintf(stderr, "Block is not reserved\n");
+        return; // Block is not reserved
+    }
     
+    // find the buddy
+    struct avail *buddy = buddy_calc(pool, block);
+    if (buddy == NULL)
+    {
+        fprintf(stderr, "Buddy calculation failed\n");
+        return; // Buddy calculation failed
+    }
+
+    // check if we can merge with buddy
+    if (block->tag == BLOCK_AVAIL && buddy->tag == BLOCK_AVAIL)
+    {
+        // merge the blocks
+        block->kval++;
+        buddy->tag = BLOCK_UNUSED;
+        buddy->next->prev = buddy->prev;
+        buddy->prev->next = buddy->next;
+        buddy->next = buddy->prev = NULL;
+
+        // add the merged block back into the free list
+    }
+
+    // add back into free list
+    block->prev = pool->avail[block->kval].prev;
+    block->next = &pool->avail[block->kval];
+    pool->avail[block->kval].prev->next = block;
+    pool->avail[block->kval].prev = block;
+    block->tag = BLOCK_AVAIL;
+
 }
 
 // /**
