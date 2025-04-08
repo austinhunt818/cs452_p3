@@ -73,6 +73,7 @@ void test_buddy_malloc_one_byte(void)
   size_t size = UINT64_C(1) << kval;
   buddy_init(&pool, size);
   void *mem = buddy_malloc(&pool, 1);
+  printf("Allocated memory address: %p\n", mem);
   //Make sure correct kval was allocated
   buddy_free(&pool, mem);
   check_buddy_pool_full(&pool);
@@ -163,12 +164,12 @@ void test_buddy_calc(void){
   struct avail *buddy = buddy_calc(&pool, block);
   fprintf(stderr, "\tblock = %p\n\tbuddy = %p\n\n", block, buddy);
   assert(buddy != NULL);
-  assert(buddy = block + (1 << block->kval));
+  assert(buddy == (struct avail *)((uintptr_t)block ^ (UINT64_C(1) << block->kval)));
 
   struct avail *block_buddy = buddy_calc(&pool, buddy);
   fprintf(stderr, "\tblock_buddy = \t%p\n\tbuddy = \t%p\n", block_buddy, block);
   assert(block_buddy != NULL);
-  assert(block_buddy = block);
+  assert(block_buddy == block);
 
   buddy_destroy(&pool);
 }
@@ -183,9 +184,10 @@ int main(void) {
 
   UNITY_BEGIN();
   RUN_TEST(test_buddy_init);
-  RUN_TEST(test_buddy_malloc_one_byte);
-  RUN_TEST(test_buddy_malloc_one_large);
   RUN_TEST(test_btok);
   RUN_TEST(test_buddy_calc);
+  RUN_TEST(test_buddy_malloc_one_byte);
+  RUN_TEST(test_buddy_malloc_one_large);
+  
 return UNITY_END();
 }

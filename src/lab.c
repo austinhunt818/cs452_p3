@@ -42,28 +42,41 @@ struct avail *buddy_calc(struct buddy_pool *pool, struct avail *buddy)
 {   
     if (buddy == NULL)
     {
+        fprintf(stderr, "buddy_calc: Buddy is NULL\n");
         return NULL;
     }
 
-    int addr = (int)((char *)buddy - (char *)pool->base);
+    uintptr_t addr = (int)((char *)buddy - (char *)pool->base);
+    fprintf(stderr, "buddy_calc: addr = %p - %p = %d\n", buddy, pool->base, addr);
     int k = buddy->kval;
 
-    int buddy_addr = (addr ^ (1 << k));
+    fprintf(stderr, "buddy_calc: k = %d\n", k);
+    uintptr_t buddy_addr = (addr ^ (UINT64_C(1) << k));
+    if (buddy_addr < 0 || buddy_addr >= (uintptr_t)pool->numbytes)
+    {
+        fprintf(stderr, "buddy_calc: Buddy address out of range. Invalid adress: %p\tMax address: %p\n", buddy_addr, pool->numbytes);
+        return NULL; // Ensure buddy address is within valid range
+    }
+
     struct avail *buddy_block = (struct avail *)((char *)pool->base + buddy_addr);
-    buddy_block->kval = buddy->kval;
-    buddy_block->tag = buddy->tag;
+    buddy_block->tag = BLOCK_AVAIL;
+    buddy_block->kval = k;
+
+
     return buddy_block;
 }
 
 void *buddy_malloc(struct buddy_pool *pool, size_t size)
 {
-    
-    //get the kval for the requested size with enough room for the tag and kval fields
-    size_t kval = btok(size + sizeof(struct avail));
+    //get the kval for the requested size with enough room for the tag
+    size_t kval = btok(size + sizeof(struct avail)); //sizeof(struct avail) is the size of the metadata
+    fprintf(stderr, "buddy_malloc: kval = %zu\n", kval);
 
     //R1 Find a block
+
     if(kval > pool->kval_m)
     {
+        fprintf(stderr, "Requested size is too large\n");
         return NULL; //Not enough memory
     }
 
@@ -78,42 +91,79 @@ void *buddy_malloc(struct buddy_pool *pool, size_t size)
         }
     }
 
-    //There was not enough memory to satisfy the request thus we need to set error and return NULL
+
+    fprintf(stderr, "i: %d\n", block->kval);
+    //If we did not find a block then we need to return NULL
     if (block == NULL)
     {
+        errno = ENOMEM;
+        fprintf(stderr, "No available memory\n");
+        return NULL;
+    }
+    if (block->tag != BLOCK_AVAIL)
+    {
+        errno = ENOMEM;
+        fprintf(stderr, "Block is not available\n");
+        return NULL;
+    }
+    if (block->kval < kval)
+    {
+        errno = ENOMEM;
+        fprintf(stderr, "Block is not large enough\n");
         return NULL;
     }
 
     //R2 Remove from list;
-    //remove the block from the list
-    // block->prev->next = block->next;
+    // remove the block from the list
+    block->prev->next = block->next;
+    block->next->prev = block->prev;
+    block->next = block->prev = NULL;
+    block->tag = BLOCK_RESERVED;
+
+    //R3 Split required?
+    while(block->kval > kval){
+        fprintf(stderr, "Splitting block\n");
+        fprintf(stderr, "Block size: %zu\n", block->kval);
+        fprintf(stderr, "kval size: %zu\n", kval);
+        //R4 Split the block
+        block->kval--;
+        struct avail *buddy = buddy_calc(pool, block);
+        if (buddy == NULL)
+        {
+            fprintf(stderr, "Buddy calculation failed\n");
+            // If buddy calculation fails, we need to restore the block to its original state
+            block->prev->next = block;
+            block->next->prev = block;
+            block->next = block->prev = NULL;
+            block->tag = BLOCK_AVAIL;
+            return NULL;
+        }
+
+        // Update the buddy block's properties
+        buddy->tag = BLOCK_AVAIL;
+        buddy->next = &pool->avail[buddy->kval];
+        buddy->prev = pool->avail[buddy->kval].prev;
+        pool->avail[buddy->kval].prev->next = buddy;
+        pool->avail[buddy->kval].prev = buddy;
+
+    }
 
 
-    // //R3 Split required?
-    // if(block->kval > kval){
-    //     struct avail *buddy = buddy_calc(pool, block);
-    //     if (buddy == NULL)
-    //     {
-    //         return NULL;
-    //     }
-    // }
+    // Ensure the block is valid before returning
+    if (block == NULL)
+    {
+        fprintf(stderr, "Block is NULL\n");
+        return NULL; // Return NULL if block is invalid
+    }
 
-    // //R4 Split the block
-    // //Set the tag and kval for the block
-    // block->tag = BLOCK_RESERVED;
-    // block->kval = kval;
-    // block->next = block->prev = block;
-    // //Set the block to point to the base address
-    // block->next = (struct avail *)((char *)pool->base + ((char *)block - (char *)pool->base));
-    // block->prev = (struct avail *)((char *)pool->base + ((char *)block - (char *)pool->base));
-
-    return ((char *)block + sizeof(struct avail));
+    // Return the memory address just after the block's metadata
+    return (void *)((char *)block + sizeof(struct avail));
 
 }
 
 void buddy_free(struct buddy_pool *pool, void *ptr)
 {
-
+    
 }
 
 // /**
